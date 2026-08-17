@@ -1,0 +1,10 @@
+# Copy to config.yml (gitignored), fill in your own tunnel ID and hostname.
+# Get the tunnel ID from `cloudflared tunnel create <name>`.
+
+tunnel: <YOUR_TUNNEL_ID>
+credentials-file: C:\Users\<you>\.cloudflared\<YOUR_TUNNEL_ID>.json
+
+ingress:
+  - hostname: your-subdomain.example.com
+    service: http://localhost:3000
+  - service: http_status:404

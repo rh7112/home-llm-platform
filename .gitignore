@@ -1,0 +1,12 @@
+# Never commit real credentials, certs, or tunnel configs
+*.json
+*.pem
+*.ovpn
+*credentials*
+cloudflared/config.yml
+.env
+.env.*
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
