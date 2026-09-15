@@ -6,9 +6,17 @@ sent to a third-party AI vendor. Runs on a home gaming PC (Ryzen 7 5700X,
 
 ## Architecture
 
-- **[Ollama](https://ollama.com)** — serves the models locally. Model
-  weights are relocated off the OS drive via the `OLLAMA_MODELS` environment
-  variable (large downloads, best kept off a small system SSD).
+- **[Ollama](https://ollama.com)** — serves the models locally, in Docker
+  alongside Open WebUI/SearXNG (`restart: unless-stopped` + Docker Desktop's
+  own "start on login" survives a reboot with zero manual steps, unlike the
+  old native Windows install). GPU passthrough via the `deploy.resources.
+  reservations.devices` block — Docker Desktop's WSL2 backend passes the
+  GPU through automatically, no separate NVIDIA container toolkit install
+  needed on Windows. Model weights stay on `F:\ollama-models` (bind-mounted
+  into the container at `.ollama/models`) rather than moving into a Docker
+  volume — same reasoning as the old `OLLAMA_MODELS` env var (large
+  downloads, best kept off a small system SSD), and reusing the existing
+  directory directly meant zero re-downloading when this moved into Docker.
 - **[Open WebUI](https://github.com/open-webui/open-webui)** — the chat
   interface, in Docker. See [`docker/docker-compose.yml`](docker/docker-compose.yml).
 - **[SearXNG](https://github.com/searxng/searxng)** — self-hosted,
@@ -39,14 +47,22 @@ Note the vision model's actual Ollama tag has no hyphen: `qwen2.5vl`, not
 
 ## Setup
 
-1. Install [Ollama](https://ollama.com/download), set `OLLAMA_MODELS` to a
-   drive with room before pulling anything, then pull the models above.
-2. `cd docker && docker compose up -d`, then edit the generated
-   `searxng-config/settings.yml` to enable JSON output, and
-   `docker compose restart searxng`.
-3. Copy `continue/config.yaml` to `~/.continue/config.yaml` (or
+1. Pick a drive with room for model weights (large downloads, best kept off
+   a small system SSD) and point `docker-compose.yml`'s `ollama` service's
+   volume mount at it.
+2. `cd docker && docker compose up -d`, then `docker exec ollama ollama
+   pull <model>` for each model above (or point the volume at an existing
+   `OLLAMA_MODELS` directory from a prior native install to reuse it
+   directly instead of re-downloading -- Ollama's blob format is identical
+   across platforms). Also edit the generated `searxng-config/settings.yml`
+   to enable JSON output, and `docker compose restart searxng`.
+3. In Docker Desktop, enable Settings -> General -> "Start Docker Desktop
+   when you log in" -- combined with every service's `restart: unless-
+   stopped`/`always`, this is what actually survives a PC restart with zero
+   manual intervention.
+4. Copy `continue/config.yaml` to `~/.continue/config.yaml` (or
    `%USERPROFILE%\.continue\config.yaml` on Windows).
-4. For remote access, either set up Synology VPN Server directly, or copy
+5. For remote access, either set up Synology VPN Server directly, or copy
    `cloudflared/config.example.yml` to `cloudflared/config.yml` (gitignored),
    fill in your own tunnel ID/hostname from `cloudflared tunnel create`, and
    run `windows/register-cloudflared-task.ps1` — **on Windows, prefer the
@@ -56,6 +72,27 @@ Note the vision model's actual Ollama tag has no hyphen: `qwen2.5vl`, not
 
 Worth reading before you hit the same walls:
 
+- **Containers started by hand (`docker run`, or an old ad-hoc setup) carry
+  no Compose labels, so `docker compose up` doesn't recognize them as
+  "already exist" and tries to recreate them.** Hit this bringing `ollama`
+  into `docker-compose.yml` alongside the already-running `open-webui`/
+  `searxng` -- compose tried to create fresh containers for both and
+  collided on their fixed `container_name`s. `docker inspect <name>
+  --format '{{json .Config.Labels}}'` shows whether a running container has
+  any `com.docker.compose.*` labels at all; if not, compose doesn't own it.
+  The new service still gets created even when the batch partially fails on
+  unrelated ones -- `docker ps -a` to check its actual state (`Created` vs
+  `Up`) and `docker start <name>` it directly rather than re-running the
+  full `up` and hitting the same conflict again.
+- **Ollama's model blob store bind-mounts straight across platforms.** No
+  need to re-pull models into a fresh Docker volume when containerizing an
+  existing native install -- point the volume mount directly at the
+  existing model directory (`docker exec ollama ollama list` should show
+  everything immediately, zero downloading). Mount it at `.ollama/models`
+  inside the container, not `.ollama` itself, if the host directory *is*
+  the models folder (contains `blobs/`/`manifests/` directly) rather than
+  a parent `.ollama` directory that happens to contain a `models`
+  subfolder -- check which one you actually have before mounting.
 - **Docker silently breaks VPN LAN routing.** `dockerd` resets the iptables
   `FORWARD` chain's default policy to `DROP` on every startup, with no
   awareness of anything else on the box that also needs forwarding (like a

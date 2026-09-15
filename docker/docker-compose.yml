@@ -1,4 +1,26 @@
 services:
+  ollama:
+    image: ollama/ollama
+    container_name: ollama
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      # Bind-mounts the existing native install's model store directly (see
+      # OLLAMA_MODELS in the Setup section) instead of re-pulling ~37GB --
+      # Ollama's blob format is identical across platforms, so this just
+      # works. F:\ollama-models IS the models directory itself (contains
+      # blobs/ and manifests/ directly), so it maps to .ollama/models
+      # inside the container, not .ollama itself.
+      - F:/ollama-models:/root/.ollama/models
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
   open-webui:
     image: ghcr.io/open-webui/open-webui:main
     container_name: open-webui
