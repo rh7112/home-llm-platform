@@ -1,0 +1,19 @@
+name: CI
+
+# Validates the compose file and shell scripts.
+# Runs on pull requests so a broken build shows up on the PR instead of
+# after merge. Deploy is deploy.yml.
+
+on:
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v5
+
+      - run: docker compose -f docker/docker-compose.yml config --no-interpolate -q
+      - run: shellcheck -S error nas/*.sh
